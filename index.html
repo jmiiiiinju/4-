@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전통 윷놀이 (가족 게임)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Jua', sans-serif;
+            background-color: #fcf8f2;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* Setup Screen Transitions */
+        .screen {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .screen.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Board Styling */
+        #board-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1/1;
+            margin: 0 auto;
+            background-color: #fef3c7;
+            border-radius: 1rem;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1), 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        /* SVG Lines */
+        #board-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #board-svg line {
+            stroke: #d97706;
+            stroke-width: 4;
+            stroke-dasharray: 8 8;
+            opacity: 0.6;
+        }
+
+        /* Nodes */
+        .board-node {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #b45309;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+        }
+        .board-node.corner {
+            width: 28px;
+            height: 28px;
+            background-color: #ea580c;
+        }
+        .board-node.center {
+            width: 32px;
+            height: 32px;
+            background-color: #dc2626;
+        }
+
+        /* Tokens */
+        .token {
+            position: absolute;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 2px solid white;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+        .token-waiting {
+            position: static;
+            transform: none;
+            width: 28px;
+            height: 28px;
+            margin: 2px;
+            display: inline-flex;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .token.highlight, .token-waiting.highlight {
+            animation: pulse-ring 1s infinite;
+            cursor: pointer;
+            z-index: 40;
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
+
+        /* Yut Animation */
+        .yut-rolling {
+            animation: roll-shake 0.5s infinite;
+        }
+        @keyframes roll-shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        /* Yut Visuals */
+        #yut-visual-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 1rem;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #yut-visual-overlay.active {
+            opacity: 1;
+        }
+        .yut-stick-container {
+            display: flex;
+            gap: 10px;
+        }
+        .yut-stick {
+            width: 25px;
+            height: 100px;
+            border-radius: 12px;
+            background-color: #b45309; /* 둥근 면 (등) */
+            border: 2px solid #78350f;
+            box-shadow: 3px 5px 10px rgba(0,0,0,0.5);
+            position: relative;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            /* 등 무늬 */
+            background-image: radial-gradient(circle at center, #92400e 2px, transparent 2px);
+            background-size: 10px 20px;
+        }
+        .yut-stick.flat {
+            background-color: #fef3c7; /* 평평한 면 (배) */
+            background-image: none;
+            border: 2px solid #d97706;
+        }
+        .yut-stick.back-do::after {
+            content: 'X';
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #dc2626;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        /* Colors for players */
+        .color-0 { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .color-1 { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .color-2 { background: linear-gradient(135deg, #10b981, #047857); }
+        .color-3 { background: linear-gradient(135deg, #f59e0b, #b45309); }
+        .bg-color-0 { background-color: #eff6ff; border-color: #3b82f6; }
+        .bg-color-1 { background-color: #fef2f2; border-color: #ef4444; }
+        .bg-color-2 { background-color: #ecfdf5; border-color: #10b981; }
+        .bg-color-3 { background-color: #fffbeb; border-color: #f59e0b; }
+        .text-color-0 { color: #1d4ed8; }
+        .text-color-1 { color: #b91c1c; }
+        .text-color-2 { color: #047857; }
+        .text-color-3 { color: #b45309; }
+
+        .log-container {
+            max-height: 150px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        /* Modal */
+        #modal-overlay {
+            backdrop-filter: blur(4px);
+            display: none;
+        }
+        #modal-overlay.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 sm:p-6 lg:p-8">
+
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="screen active flex-col items-center justify-center max-w-md w-full mx-auto my-auto bg-white p-8 rounded-3xl shadow-2xl border border-gray-100">
+        <h1 class="text-4xl font-bold text-amber-600 mb-6 text-center">전통 윷놀이</h1>
+        
+        <div class="w-full space-y-4 mb-6">
+            <div class="pt-2 pb-2">
+                <label class="block text-gray-700 font-bold mb-1">👥 참여 인원</label>
+                <select id="player-count" onchange="updatePlayerInputs()" class="w-full px-4 py-2 border-2 border-amber-300 bg-amber-50 rounded-xl text-lg focus:outline-none focus:border-amber-500 font-bold text-amber-900">
+                    <option value="2">2명 플레이</option>
+                    <option value="3">3명 플레이</option>
+                    <option value="4" selected>4명 플레이 (최대)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-gray-700 font-bold mb-1">플레이어 1 (파랑)</label>
+                <input type="text" id="p1-name" value="나" class="w-full px-4 py-2 border-2 border-blue-200 rounded-xl focus:outline-none focus:border-blue-500 text-lg">
+            </div>
+            <div>
+                <label class="block text-gray-700 font-bold mb-1">플레이어 2 (빨강)</label>
+                <input type="text" id="p2-name" value="아빠" class="w-full px-4 py-2 border-2 border-red-200 rounded-xl focus:outline-none focus:border-red-500 text-lg">
+            </div>
+            <div id="p3-container">
+                <label class="block text-gray-700 font-bold mb-1">플레이어 3 (초록)</label>
+                <input type="text" id="p3-name" value="엄마" class="w-full px-4 py-2 border-2 border-green-200 rounded-xl focus:outline-none focus:border-green-500 text-lg">
+            </div>
+            <div id="p4-container">
+                <label class="block text-gray-700 font-bold mb-1">플레이어 4 (노랑)</label>
+                <input type="text" id="p4-name" value="동생" class="w-full px-4 py-2 border-2 border-yellow-200 rounded-xl focus:outline-none focus:border-yellow-500 text-lg">
+            </div>
+            <div class="pt-2">
+                <label class="block text-gray-700 font-bold mb-1">인당 말 개수</label>
+                <select id="token-count" class="w-full px-4 py-2 border-2 border-gray-300 rounded-xl text-lg focus:outline-none focus:border-gray-500">
+                    <option value="1">1개 (빠른 게임)</option>
+                    <option value="2">2개</option>
+                    <option value="3">3개 (추천)</option>
+                    <option value="4" selected>4개 (전통)</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="startGame()" class="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-2xl py-4 rounded-2xl shadow-lg transform transition active:scale-95">
+            게임 시작!
+        </button>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen flex-col max-w-6xl w-full mx-auto gap-6 lg:gap-8 lg:flex-row">
+        
+        <!-- Left Side: Board -->
+        <div class="flex-1 flex flex-col">
+            <header class="bg-white p-4 rounded-2xl shadow-sm mb-4 border border-gray-100 flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-gray-800">윷판</h2>
+                <div class="text-sm bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-bold">
+                    🏁 시작/도착지: 우측 하단
+                </div>
+            </header>
+
+            <div id="board-container">
+                <!-- SVG Lines drawn via JS -->
+                <svg id="board-svg"></svg>
+                <!-- Nodes drawn via JS -->
+                <div id="nodes-layer"></div>
+                <!-- Tokens drawn via JS -->
+                <div id="tokens-layer"></div>
+                
+                <!-- Yut Visual Overlay -->
+                <div id="yut-visual-overlay">
+                    <div id="yut-sticks" class="yut-stick-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Controls -->
+        <div class="flex-1 flex flex-col space-y-4">
+            
+            <!-- Turn Indicator -->
+            <div id="turn-card" class="p-6 rounded-3xl shadow-md border-2 bg-white transition-colors duration-300">
+                <h3 class="text-gray-500 font-bold mb-2 text-center text-sm">현재 차례</h3>
+                <div class="text-4xl font-bold text-center mb-2" id="current-player-name">플레이어</div>
+                
+                <div class="flex flex-col items-center gap-3 mt-4">
+                    <button id="btn-throw" onclick="handleThrowClick()" class="w-full py-4 text-2xl font-bold text-white rounded-xl shadow-lg transition-transform transform active:scale-95 bg-gray-400 cursor-not-allowed">
+                        윷 던지기 (<span id="extra-rolls-count">1</span>회)
+                    </button>
+                    <div id="yut-result-display" class="text-2xl font-bold h-8 text-gray-700"></div>
+                    <div id="move-pool-container" class="flex flex-wrap gap-2 justify-center min-h-[40px] w-full mt-2"></div>
+                </div>
+            </div>
+
+            <!-- Players Status -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-3 flex-1" id="players-status">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Log -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <h4 class="text-gray-600 font-bold mb-2 border-b pb-1">📜 게임 기록</h4>
+                <div id="log-container" class="log-container space-y-1 text-sm text-gray-600"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Winner Modal -->
+    <div id="modal-overlay" class="fixed inset-0 z-50 items-center justify-center bg-black/60">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-yellow-400 transform scale-100">
+            <div class="text-6xl mb-4">🏆</div>
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">게임 종료!</h2>
+            <div id="final-rankings" class="mb-6 space-y-2 text-left bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <!-- Rankings will be inserted here -->
+            </div>
+            <button onclick="location.reload()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xl transition">
+                처음으로 돌아가기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function updatePlayerInputs() {
+            const count = parseInt(document.getElementById('player-count').value);
+            document.getElementById('p3-container').style.display = count >= 3 ? 'block' : 'none';
+            document.getElementById('p4-container').style.display = count >= 4 ? 'block' : 'none';
+        }
+        window.addEventListener('DOMContentLoaded', updatePlayerInputs);
+
+        // Game Configuration
+        let tokenPerPlayer = 4;
+        let players = [];
+        let tokens = []; // Array of { id, playerIdx, pos, history }
+        
+        let currentPlayerIndex = 0;
+        let pendingThrows = 1; // 윷 던질 기회
+        let isRolling = false;
+        let currentRank = 1; // 랭킹 추적용 변수 추가
+        
+        // 이동할 윷 선택 상태
+        let availableMoves = [];
+        let selectedMoveIndex = -1;
+
+        // Interaction State
+        let validMoves = [];
+        let isWaitingForSelection = false;
+
+        // Board Coordinates (0 to 100 percentages)
+        // 0=Start(BR), 5=TR, 10=TL, 15=BL, 20-29=Diagonals
+        const coords = {
+            0: {x: 100, y: 100}, 1: {x: 100, y: 80}, 2: {x: 100, y: 60}, 3: {x: 100, y: 40}, 4: {x: 100, y: 20},
+            5: {x: 100, y: 0},   6: {x: 80, y: 0},   7: {x: 60, y: 0},   8: {x: 40, y: 0},   9: {x: 20, y: 0},
+            10: {x: 0, y: 0},    11: {x: 0, y: 20},  12: {x: 0, y: 40},  13: {x: 0, y: 60},  14: {x: 0, y: 80},
+            15: {x: 0, y: 100},  16: {x: 20, y: 100},17: {x: 40, y: 100},18: {x: 60, y: 100},19: {x: 80, y: 100},
+            20: {x: 80, y: 20},  21: {x: 65, y: 35}, 22: {x: 50, y: 50}, // TR to Center
+            23: {x: 35, y: 65},  24: {x: 20, y: 80},                     // Center to BL
+            25: {x: 20, y: 20},  26: {x: 35, y: 35},                     // TL to Center
+            27: {x: 65, y: 65},  28: {x: 80, y: 80}                      // Center to BR (Out)
+        };
+
+        // Next node mapping (default forward)
+        const nextMap = {
+            0:1, 1:2, 2:3, 3:4, 4:5, 5:6, 6:7, 7:8, 8:9, 9:10, 
+            10:11, 11:12, 12:13, 13:14, 14:15, 15:16, 16:17, 17:18, 18:19, 19:29, // 29 is OUT
+            20:21, 21:22, 22:23, 23:24, 24:15,
+            25:26, 26:22,
+            27:28, 28:29
+        };
+
+        function startGame() {
+            // Get user inputs
+            const pCount = parseInt(document.getElementById('player-count').value);
+            players = [
+                { id: 0, name: document.getElementById('p1-name').value || '나', completed: 0, rank: 0 },
+                { id: 1, name: document.getElementById('p2-name').value || '아빠', completed: 0, rank: 0 }
+            ];
+            if (pCount >= 3) players.push({ id: 2, name: document.getElementById('p3-name').value || '엄마', completed: 0, rank: 0 });
+            if (pCount >= 4) players.push({ id: 3, name: document.getElementById('p4-name').value || '동생', completed: 0, rank: 0 });
+
+            tokenPerPlayer = parseInt(document.getElementById('token-count').value);
+            currentRank = 1;
+            pendingThrows = 1;
+            availableMoves = [];
+            selectedMoveIndex = -1;
+
+            // Initialize tokens
+            let tokenId = 0;
+            for (let p = 0; p < players.length; p++) {
+                for (let t = 0; t < tokenPerPlayer; t++) {
+                    tokens.push({ id: tokenId++, playerIdx: p, pos: -1, history: [-1] });
+                }
+            }
+
+            // UI Transitions
+            document.getElementById('setup-screen').classList.remove('active');
+            setTimeout(() => {
+                document.getElementById('game-screen').classList.add('active');
+                initPlayerStatus(); // 상태창을 먼저 초기화해야 대기열 DOM이 생성됩니다.
+                initBoard();        // 그 다음 보드와 말(token)들을 렌더링합니다.
+                updateTurnUI();
+                addLog('게임이 시작되었습니다! 우측 하단이 출발선입니다.');
+            }, 500);
+        }
+
+        function getPx(percent) {
+            return `calc(${percent}% * 0.84 + 8%)`; // 8% padding on all sides to keep tokens inside
+        }
+
+        function initBoard() {
+            const svg = document.getElementById('board-svg');
+            const nodesLayer = document.getElementById('nodes-layer');
+            
+            // Draw lines
+            const drawLine = (p1, p2) => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', `${coords[p1].x}%`);
+                line.setAttribute('y1', `${coords[p1].y}%`);
+                line.setAttribute('x2', `${coords[p2].x}%`);
+                line.setAttribute('y2', `${coords[p2].y}%`);
+                // Scale inside SVG viewBox manually to match CSS calc padding
+                line.style.transform = "scale(0.84) translate(9.5%, 9.5%)"; 
+                svg.appendChild(line);
+            };
+
+            // Perimeter
+            drawLine(0, 5); drawLine(5, 10); drawLine(10, 15); drawLine(15, 0);
+            // Diagonals
+            drawLine(5, 15); drawLine(10, 0);
+
+            // Draw Nodes
+            for (let i = 0; i <= 28; i++) {
+                const node = document.createElement('div');
+                node.className = 'board-node';
+                if ([0, 5, 10, 15].includes(i)) node.classList.add('corner');
+                if (i === 22) node.classList.add('center');
+                
+                node.style.left = getPx(coords[i].x);
+                node.style.top = getPx(coords[i].y);
+                nodesLayer.appendChild(node);
+            }
+            renderTokens();
+        }
+
+        function initPlayerStatus() {
+            const container = document.getElementById('players-status');
+            container.innerHTML = '';
+            players.forEach((p, idx) => {
+                let rankBadge = p.rank ? `<span class="text-sm bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full font-bold ml-2">${p.rank}등 완주!</span>` : '';
+                let opacityClass = p.rank ? 'opacity-50 grayscale' : '';
+                container.innerHTML += `
+                    <div id="status-p${idx}" class="p-3 rounded-xl bg-color-${idx} border-2 flex flex-col justify-between h-full ${opacityClass}">
+                        <div class="flex justify-between items-center mb-2">
+                            <div>
+                                <span class="font-bold text-color-${idx}">${p.name}</span>
+                                ${rankBadge}
+                            </div>
+                            <span class="text-xs bg-white px-2 py-1 rounded-full text-color-${idx} font-bold shadow-sm">완료: ${p.completed}/${tokenPerPlayer}</span>
+                        </div>
+                        <div id="waiting-tokens-${idx}" class="flex flex-wrap min-h-[32px]"></div>
+                    </div>
+                `;
+            });
+        }
+
+        function updateTurnUI() {
+            const player = players[currentPlayerIndex];
+            
+            // Highlight current player card
+            const turnCard = document.getElementById('turn-card');
+            turnCard.className = `p-6 rounded-3xl shadow-md border-2 transition-colors duration-300 bg-color-${currentPlayerIndex}`;
+            document.getElementById('current-player-name').innerText = player.name;
+            document.getElementById('current-player-name').className = `text-4xl font-bold text-center mb-2 text-color-${currentPlayerIndex}`;
+            
+            const btnThrow = document.getElementById('btn-throw');
+            if (pendingThrows > 0) {
+                btnThrow.disabled = false;
+                btnThrow.className = `w-full py-4 text-2xl font-bold text-white rounded-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95 color-${currentPlayerIndex} animate-bounce`;
+                btnThrow.innerHTML = `윷 던지기 (<span id="extra-rolls-count">${pendingThrows}</span>회)`;
+            } else {
+                btnThrow.disabled = true;
+                btnThrow.className = `w-full py-4 text-2xl font-bold text-white rounded-xl transition bg-gray-400 cursor-not-allowed`;
+                btnThrow.innerText = `이동할 윷을 선택하세요`;
+            }
+
+            renderMovePool();
+            renderTokens();
+        }
+
+        function renderMovePool() {
+            const container = document.getElementById('move-pool-container');
+            container.innerHTML = '';
+            
+            availableMoves.forEach((move, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `px-4 py-2 rounded-lg font-bold text-lg shadow-sm border-2 transition-all ${selectedMoveIndex === idx ? 'bg-amber-500 text-white border-amber-600 scale-110' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`;
+                btn.innerText = move.name;
+                
+                if (pendingThrows === 0) {
+                    btn.onclick = () => selectMove(idx);
+                } else {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                container.appendChild(btn);
+            });
+        }
+
+        function selectMove(idx) {
+            if (pendingThrows > 0) return; // 던질 기회가 남았다면 선택 불가
+            selectedMoveIndex = idx;
+            renderMovePool();
+            
+            // 다른 윷을 선택하면 이전 말 선택 상태를 초기화
+            isWaitingForSelection = false;
+            validMoves = [];
+            renderTokens(); 
+            
+            const throwVal = availableMoves[idx].value;
+            prepareMove(throwVal);
+        }
+
+        function endTurn() {
+            if (pendingThrows > 0 || availableMoves.length > 0) return; // Safeguard
+            
+            // 완주하지 않은 다음 플레이어 찾기
+            let nextPlayerIndex = currentPlayerIndex;
+            let found = false;
+            for (let i = 1; i < players.length; i++) {
+                let checkIdx = (currentPlayerIndex + i) % players.length;
+                if (players[checkIdx].rank === 0) {
+                    nextPlayerIndex = checkIdx;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) return; // 모두 완주했으면 턴 종료 안 함 (모달이 띄워짐)
+
+            currentPlayerIndex = nextPlayerIndex;
+            pendingThrows = 1;
+            availableMoves = [];
+            selectedMoveIndex = -1;
+            document.getElementById('yut-result-display').innerHTML = '';
+            document.getElementById('move-pool-container').innerHTML = '';
+            updateTurnUI();
+            addLog(`--- <b>${players[currentPlayerIndex].name}</b> 님의 차례입니다 ---`);
+        }
+
+        function showYutVisuals(sticks) {
+            const overlay = document.getElementById('yut-visual-overlay');
+            const container = document.getElementById('yut-sticks');
+            container.innerHTML = '';
+            
+            sticks.forEach(type => {
+                const stick = document.createElement('div');
+                stick.className = `yut-stick ${type}`;
+                
+                // 자연스러운 연출을 위해 무작위 회전값 적용
+                const rot = (Math.random() - 0.5) * 60; // -30도 ~ 30도
+                stick.style.transform = `translateY(-50px) rotate(${rot}deg) scale(0.8)`;
+                container.appendChild(stick);
+                
+                // 떨어지는 애니메이션
+                setTimeout(() => {
+                    stick.style.transform = `translateY(0px) rotate(${rot}deg) scale(1)`;
+                }, 50);
+            });
+            
+            overlay.classList.add('active');
+        }
+
+        function handleThrowClick() {
+            if (isRolling || pendingThrows <= 0) return;
+            isRolling = true;
+            pendingThrows--;
+            
+            const btnThrow = document.getElementById('btn-throw');
+            btnThrow.classList.remove('animate-bounce');
+            btnThrow.disabled = true;
+            
+            const display = document.getElementById('yut-result-display');
+            display.classList.add('yut-rolling');
+            display.innerText = "🎲 윷 던지는 중...";
+
+            // 1. 윷 굴리기 결과 및 애니메이션 노출
+            const result = rollYut();
+            setTimeout(() => showYutVisuals(result.sticks), 100);
+
+            setTimeout(() => {
+                display.classList.remove('yut-rolling');
+                document.getElementById('yut-visual-overlay').classList.remove('active'); // 윷 그래픽 숨기기
+                
+                let logMsg = `<b>${players[currentPlayerIndex].name}</b> 님이 <b>${result.name}</b>(${result.value > 0 ? '+'+result.value : result.value})을(를) 던졌습니다.`;
+                
+                // 결과 저장
+                availableMoves.push(result);
+                
+                if (result.value === 4 || result.value === 5) {
+                    pendingThrows++;
+                    logMsg += " 🌟 <b>한 번 더!</b>";
+                }
+                
+                display.innerHTML = `<span class="text-${result.value > 3 ? 'red' : 'blue'}-600">${result.name}!</span> <span class="text-sm ml-2">${result.emoji}</span>`;
+                addLog(logMsg);
+                
+                isRolling = false;
+                updateTurnUI();
+                
+                if (pendingThrows === 0) {
+                    // 남은 윷이 1개뿐이면 자동 선택
+                    if (availableMoves.length === 1) {
+                        selectMove(0);
+                    } else {
+                        addLog("👇 이동할 윷을 선택해주세요.");
+                    }
+                }
+            }, 1200); // 윷 그래픽을 1.2초 동안 보여줌
+        }
+
+        function rollYut() {
+            let sticks = [];
+            let flatCount = 0;
+            
+            for(let i=0; i<4; i++) {
+                if (Math.random() > 0.4) {
+                    sticks.push('flat');
+                    flatCount++;
+                } else {
+                    sticks.push('round');
+                }
+            }
+
+            let result = {};
+            if (flatCount === 0) result = { value: 5, name: '모', emoji: '🌕🌕🌕🌕' };
+            else if (flatCount === 4) result = { value: 4, name: '윷', emoji: '🌗🌗🌗🌗' };
+            else if (flatCount === 3) result = { value: 3, name: '걸', emoji: '🌗🌗🌗🌕' };
+            else if (flatCount === 2) result = { value: 2, name: '개', emoji: '🌗🌗🌕🌕' };
+            else if (flatCount === 1) {
+                // 1/4 확률로 빽도
+                if (Math.random() < 0.25) {
+                    sticks[sticks.indexOf('flat')] = 'flat back-do';
+                    result = { value: -1, name: '빽도', emoji: '❌🌕🌕🌕' };
+                } else {
+                    result = { value: 1, name: '도', emoji: '🌗🌕🌕🌕' };
+                }
+            }
+            result.sticks = sticks;
+            return result;
+        }
+
+        function addLog(msg) {
+            const container = document.getElementById('log-container');
+            const el = document.createElement('div');
+            el.innerHTML = msg;
+            container.insertBefore(el, container.firstChild);
+        }
+
+        function calculateDestination(startPos, history, steps) {
+            if (steps === -1) {
+                if (startPos === -1) return null; // Cannot back-do if not on board
+                if (startPos === 0) {
+                    // Back-do from start goes to 19 (space before finish)
+                    return { finalPos: 19, newHistory: [...history, 19] };
+                }
+                if (history.length > 1) {
+                    let newHist = [...history];
+                    newHist.pop(); // Remove current pos
+                    return { finalPos: newHist[newHist.length - 1], newHistory: newHist };
+                }
+                return null;
+            }
+
+            let curr = startPos;
+            let newHistory = [...history];
+
+            if (curr === -1) curr = 0;
+
+            for (let i = 0; i < steps; i++) {
+                if (curr === 29) break; // Reached end
+                
+                if (i === 0) {
+                    // Shortcuts apply only if you START your turn on them
+                    if (curr === 5) curr = 20;
+                    else if (curr === 10) curr = 25;
+                    else if (curr === 22) curr = 27; // Center -> BR
+                    else curr = nextMap[curr];
+                } else {
+                    curr = nextMap[curr];
+                }
+                newHistory.push(curr);
+            }
+            return { finalPos: curr, newHistory };
+        }
+
+        function prepareMove(throwVal) {
+            const myTokens = tokens.filter(t => t.playerIdx === currentPlayerIndex && t.pos !== 29);
+            validMoves = [];
+            
+            // 중복 계산을 피하기 위해 위치 기반으로 필터링 (업힌 말들은 하나의 선택지로 취급)
+            let checkedPos = new Set();
+            
+            for (let t of myTokens) {
+                if (checkedPos.has(t.pos)) continue;
+                checkedPos.add(t.pos);
+                
+                const dest = calculateDestination(t.pos, t.history, throwVal);
+                if (dest) {
+                    validMoves.push({ token: t, dest: dest });
+                }
+            }
+            
+            if (validMoves.length === 0) {
+                addLog("앗! 움직일 수 있는 말이 없습니다. (해당 윷 무효)");
+                if (selectedMoveIndex !== -1) {
+                    availableMoves.splice(selectedMoveIndex, 1);
+                    selectedMoveIndex = -1;
+                }
+                renderMovePool();
+                afterMove();
+            } else if (validMoves.length === 1) {
+                // 선택지가 하나뿐이면 즉시 자동 이동 (빠른 진행)
+                executeSelectedMove(validMoves[0]);
+            } else {
+                // 움직일 수 있는 말이 2개 이상(서로 다른 위치)이면 반짝거리며 사용자 선택 대기
+                isWaitingForSelection = true;
+                addLog("👆 <b>어떤 말을 움직일지 클릭해서 선택해주세요!</b>");
+                renderTokens(); 
+            }
+        }
+
+        function executeSelectedMove(moveObj) {
+            isWaitingForSelection = false;
+            validMoves = [];
+            
+            const caughtSomeone = executeMove(currentPlayerIndex, moveObj.token.pos, moveObj.dest.finalPos, moveObj.dest.newHistory);
+            
+            // 사용한 윷 제거
+            if (selectedMoveIndex !== -1) {
+                availableMoves.splice(selectedMoveIndex, 1);
+                selectedMoveIndex = -1;
+            }
+
+            renderTokens();
+            checkWin(currentPlayerIndex);
+            
+            if (caughtSomeone) {
+                pendingThrows++; // 말을 잡았으므로 한 번 더 던짐
+            }
+            
+            afterMove();
+        }
+
+        function selectTokenToMove(pos) {
+            if (!isWaitingForSelection) return;
+            const moveObj = validMoves.find(m => m.token.pos === pos);
+            if (moveObj) {
+                executeSelectedMove(moveObj);
+            }
+        }
+
+        function afterMove() {
+            isRolling = false;
+            if (pendingThrows > 0) {
+                // 잡기 등으로 다시 던져야 하는 경우
+                updateTurnUI();
+            } else if (availableMoves.length > 0) {
+                // 남은 윷이 있는 경우
+                updateTurnUI();
+                if (availableMoves.length === 1) {
+                    selectMove(0);
+                } else {
+                    addLog("👇 다음으로 이동할 윷을 선택해주세요.");
+                }
+            } else {
+                // 더 이상 던질 기회도, 남은 윷도 없으면 턴 종료
+                setTimeout(endTurn, 1000);
+            }
+        }
+
+        function executeMove(playerIdx, startPos, finalPos, newHistory) {
+            let group = [];
+            if (startPos === -1) {
+                // 출발 대기 중인 말은 한 번에 1개씩만 출발시킵니다.
+                const singleToken = tokens.find(t => t.playerIdx === playerIdx && t.pos === -1);
+                if (singleToken) group = [singleToken];
+            } else {
+                // 보드판 위에 있는 말들은 업힌(그룹) 상태이므로 모두 함께 이동합니다.
+                group = tokens.filter(t => t.playerIdx === playerIdx && t.pos === startPos);
+            }
+            
+            let caughtPlayerName = null;
+            
+            // Check catch
+            if (finalPos !== 29 && finalPos !== -1) {
+                tokens.forEach(t => {
+                    if (t.playerIdx !== playerIdx && t.pos === finalPos) {
+                        t.pos = -1;
+                        t.history = [-1];
+                        caughtPlayerName = players[t.playerIdx].name;
+                    }
+                });
+            }
+
+            // Move the group
+            group.forEach(t => {
+                t.pos = finalPos;
+                t.history = newHistory;
+            });
+
+            if (finalPos === 29) {
+                players[playerIdx].completed += group.length;
+                addLog(`🏁 <b>${players[playerIdx].name}</b> 님의 말 ${group.length}개가 골인했습니다!`);
+                initPlayerStatus(); // Update status UI
+            }
+
+            if (caughtPlayerName) {
+                addLog(`⚔️ 대박! <b>${players[playerIdx].name}</b> 님이 <b>${caughtPlayerName}</b>의 말을 잡았습니다! (한 번 더)`);
+                return true;
+            }
+            return false;
+        }
+
+        function checkWin(playerIdx) {
+            if (players[playerIdx].completed >= tokenPerPlayer && players[playerIdx].rank === 0) {
+                players[playerIdx].rank = currentRank++;
+                addLog(`🎉 <b>${players[playerIdx].name}</b> 님이 ${players[playerIdx].rank}등으로 완주했습니다!`);
+                initPlayerStatus(); // UI 상태 업데이트
+
+                // 남은 사람이 1명일 때 게임 종료
+                if (currentRank >= players.length) {
+                    const lastPlayer = players.find(p => p.rank === 0);
+                    if (lastPlayer) {
+                        lastPlayer.rank = currentRank; // 마지막 남은 플레이어는 자동으로 꼴찌
+                    }
+                    showFinalResults();
+                }
+            }
+        }
+
+        function showFinalResults() {
+            const sortedPlayers = [...players].sort((a, b) => a.rank - b.rank);
+            let resultsHTML = '';
+            const medals = ['🥇', '🥈', '🥉', '😭'];
+            
+            sortedPlayers.forEach((p, i) => {
+                resultsHTML += `<div class="flex items-center space-x-3 text-lg font-bold border-b last:border-0 py-2">
+                                    <span class="text-2xl">${medals[i] || '🎖️'}</span>
+                                    <span class="text-gray-600">${p.rank}등</span>
+                                    <span class="text-color-${p.id} flex-1 text-right">${p.name}</span>
+                                </div>`;
+            });
+            
+            document.getElementById('final-rankings').innerHTML = resultsHTML;
+            document.getElementById('modal-overlay').classList.add('active');
+        }
+
+        function renderTokens() {
+            const tokensLayer = document.getElementById('tokens-layer');
+            tokensLayer.innerHTML = '';
+            
+            // Clear waiting statuses
+            for(let p=0; p<players.length; p++) {
+                const container = document.getElementById(`waiting-tokens-${p}`);
+                if (container) container.innerHTML = '';
+            }
+
+            // Group tokens by position
+            let posMap = {};
+            tokens.forEach(t => {
+                if (t.pos === 29) return; // Skip finished
+                if (!posMap[t.pos]) posMap[t.pos] = {};
+                if (!posMap[t.pos][t.playerIdx]) posMap[t.pos][t.playerIdx] = 0;
+                posMap[t.pos][t.playerIdx]++;
+            });
+
+            // Render on board or in waiting area
+            Object.keys(posMap).forEach(posStr => {
+                const pos = parseInt(posStr);
+                Object.keys(posMap[pos]).forEach(pIdxStr => {
+                    const pIdx = parseInt(pIdxStr);
+                    const count = posMap[pos][pIdx];
+                    
+                    if (pos === -1) {
+                        // Render in waiting area
+                        const waitingContainer = document.getElementById(`waiting-tokens-${pIdx}`);
+                        for(let i=0; i<count; i++) {
+                            const tk = document.createElement('div');
+                            tk.className = `token-waiting color-${pIdx} rounded-full text-white shadow flex items-center justify-center font-bold border border-white/50`;
+                            tk.innerText = "말";
+                            
+                            // 선택 대기 중이고, 현재 플레이어의 대기열이며, 첫 번째 말 요소인 경우만 클릭 활성화
+                            if (isWaitingForSelection && pIdx === currentPlayerIndex && i === 0) {
+                                const moveObj = validMoves.find(m => m.token.pos === -1);
+                                if (moveObj) {
+                                    tk.classList.add('highlight');
+                                    tk.onclick = () => selectTokenToMove(-1);
+                                    tk.title = "새로운 말을 출발시킵니다";
+                                }
+                            }
+                            
+                            waitingContainer.appendChild(tk);
+                        }
+                    } else {
+                        // Render on board
+                        const tk = document.createElement('div');
+                        tk.className = `token color-${pIdx}`;
+                        tk.style.left = getPx(coords[pos].x);
+                        tk.style.top = getPx(coords[pos].y);
+                        
+                        // 선택 대기 중이고, 현재 플레이어의 말인 경우 클릭 활성화
+                        if (isWaitingForSelection && pIdx === currentPlayerIndex) {
+                            const moveObj = validMoves.find(m => m.token.pos === pos);
+                            if (moveObj) {
+                                tk.classList.add('highlight');
+                                tk.onclick = () => selectTokenToMove(pos);
+                                tk.title = "이 말을 이동시킵니다";
+                            }
+                        }
+
+                        // Show count if grouped
+                        if (count > 1) {
+                            tk.innerText = count;
+                            tk.style.transform = `translate(-50%, -50%) scale(1.15)`; // Slightly larger for groups
+                        } else {
+                            // Using a shape or empty for single token
+                            tk.innerHTML = `<div class="w-3 h-3 bg-white rounded-full opacity-50"></div>`;
+                        }
+
+                        tokensLayer.appendChild(tk);
+                    }
+                });
+            });
+        }
+    </script>
+</body>
+</html>
